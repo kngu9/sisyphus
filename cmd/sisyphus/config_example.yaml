@@ -1,0 +1,132 @@
+# Copyright 2019 CanonicalLtd
+
+# backend specifies which call backend is to be used
+# - http: http backend will be used for transition calls
+#         meaning the simulation will compose http requests
+#         using call parameters and unmarshal response body
+#         as json to retrieve call results.
+# - kafka: means that on state transition messages are to 
+#         be sent to kafka. Only body and header call parameters
+#         will be used to compose a message with a json payload.
+#         no results are retrieved from kafka.
+backend: http
+constants:
+  constant2: value2
+  number_of_user: "1000"
+# root_entities names the top level entities
+root-entities:
+- cardinality: number_of_users
+  entity: user
+  timer:
+    type: random
+    min: 10ms
+    max: 1s
+entities:
+  entity1:
+    initial_state: state
+  entity2:
+    initial_state: other-state
+  user:
+    attributes:
+      attribute1:
+        # type constant means the attribute has a constant value
+        type: constant
+        value: 10
+        min: 0
+        max: 0
+        "n": 0
+      attribute2:
+        # type random means the attribute is assigned a random
+        # value between min and max with a uniform distribution
+        type: random
+        value: 0
+        min: 1
+        max: 10
+        "n": 0
+      # type power means the values should follow the power law
+      # see http://mathworld.wolfram.com/RandomNumber.html
+      # value is derived as [(max^(n+1)-min^(n+1))*rand()+min^(n+1)]^(1/(n+1))
+      attribute3:
+        type: power
+        value: 0
+        min: 1
+        max: 100
+        "n": -2
+state:
+  state1:
+    timer:
+      type: fixed
+      interval: 1s
+    transitions:
+      # state specifies into which state this transition leads
+    - state: state1
+      # probability specifies the probability of this transition
+      # - sum of probabilities should be 1.
+      probability: 0.1
+      call:
+        # if using the http backend the method specifies the
+        # http method of the request
+        method: POST
+        # url specifies the target URL of the http request
+        url: some-url
+        params:
+        # type body means the parameter will be json encoded in the
+        # request body with the specified key 
+        - type: body
+          attribute: none
+          key: key
+        # type header means the parameter value will be set as request
+        # header with the specified key
+        - type: header
+          attribute: none
+          key: key
+        results:
+        # key specifies the json key of the field
+        # and attribute specifies the attribute name under
+        # which the json field value should be stored
+        - key: key
+          attribute: attr1
+    - state: the-state1
+      probability: 0.2
+      call:
+        method: GET
+        url: some-url
+        params:
+        # type form means the parameter will be encoded as a url query paramete
+        # as <key>=<value of attribute>
+        - type: form
+          attribute: none
+          key: key
+        results:
+        - key: key
+          attribute: attr1
+  state2:
+    time:
+      type: random
+      min: 1s
+      max: 1h0m0s
+    transitions:
+    - state: the-state
+      probability: 0.1
+      call:
+        method: POST
+        url: some-url
+        params:
+        - type: body
+          attribute: none
+          key: key
+        results:
+        - key: key
+          attribute: attr1
+    - state: the-state1
+      probability: 0.2
+      call:
+        method: GE
+        url: some-url
+        params:
+        - type: form
+          attribute: none
+          key: key
+        results:
+        - key: key
+          attribute: attr1
