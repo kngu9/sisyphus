@@ -22,19 +22,17 @@ import (
 )
 
 var (
-	r *rand.Rand
-
 	contextDoneError = errors.New("done")
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 // CallBackend defines the interface used by the simulation to perform
 // state transition calls.
 type CallBackend interface {
 	Do(context.Context, config.Call, call.Attributes) (call.Attributes, error)
-}
-
-func init() {
-	r = rand.New(rand.NewSource(time.Now().UnixNano()))
 }
 
 // New returns a new simulation based on the provided configuration.
@@ -233,7 +231,7 @@ func (s *State) run(ctx context.Context, sim *Simulation) {
 		return
 	}
 	// create a random number [0 .. sum]
-	randomNumber := sum * r.Float64()
+	randomNumber := sum * rand.Float64()
 	for _, transition := range s.Transitions {
 		// subtract the transition weigth
 		randomNumber -= transition.Probability
@@ -285,37 +283,40 @@ func (a *AttributeDistribution) Sample() (interface{}, error) {
 	case config.ConstantIntAttributeType:
 		return a.Value, nil
 	case config.RandomIntAttributeType:
-		return int(math.Floor(a.Min + (a.Max-a.Min)*r.Float64())), nil
+		return int(math.Floor(a.Min + (a.Max-a.Min)*rand.Float64())), nil
 	case config.RandomFloatAttributeType:
-		return a.Min + (a.Max-a.Min)*r.Float64(), nil
+		return a.Min + (a.Max-a.Min)*rand.Float64(), nil
 	case config.PowerFloatAttributeType:
-		v := r.Float64()
+		v := rand.Float64()
 		return math.Pow((math.Pow(a.Max, a.N+1)-math.Pow(a.Min, a.N+1))*v+math.Pow(a.Min, a.N+1), (1 / (a.N + 1))), nil
 	case config.NormalFloatAttributeType:
-		return math.Abs(r.NormFloat64()*a.StdDev + a.N), nil
+		return math.Abs(rand.NormFloat64()*a.StdDev + a.N), nil
 	case config.ConstantStringAttributeType:
 		return a.StringValue, nil
 	case config.RandomStringAttributeType:
+		uuid, err := utils.NewUUID()
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
 		if a.StringValue == "" {
-			uuid, err := utils.NewUUID()
-			if err != nil {
-				return nil, errors.Trace(err)
-			}
 			return uuid.String(), nil
 		}
-		return fmt.Sprintf("%s%d", a.StringValue, int(math.Floor(a.Min+(a.Max-a.Min)*r.Float64()))), nil
+		if a.Min != 0 || a.Max != 0 {
+			return fmt.Sprintf("%s%d", a.StringValue, int(math.Floor(a.Min+(a.Max-a.Min)*rand.Float64()))), nil
+		}
+		return fmt.Sprintf("%s%v", a.StringValue, uuid), nil
 	case config.RandomValueAttributeType:
 		if len(a.Values) == 0 {
 			return nil, errors.New("empty list of values")
 		}
-		return a.Values[r.Intn(len(a.Values))], nil
+		return a.Values[rand.Intn(len(a.Values))], nil
 	case config.RandomSubsetAttributeType:
 		if len(a.Values) == 0 {
 			return nil, errors.New("empty list of values")
 		}
 		values := make(map[int]bool)
-		for i := 0; i < r.Intn(len(a.Values)); i++ {
-			values[r.Intn(len(a.Values))] = true
+		for i := 0; i < rand.Intn(len(a.Values)); i++ {
+			values[rand.Intn(len(a.Values))] = true
 		}
 		subset := []interface{}{}
 		for k, _ := range values {
