@@ -71,8 +71,10 @@ func (c *httpCallBackend) Do(ctx context.Context, call config.Call, attributes A
 			queryValues.Add(p.Key, fmt.Sprintf("%v", attributes[p.Attribute]))
 		case config.HeaderCallParameterType:
 			request.Header.Add(p.Key, fmt.Sprintf("%v", attributes[p.Attribute]))
+		case config.BodyCallParameterType:
+		default:
+			return resultAttributes, errors.Errorf("unknown parameter type %q", p.Type)
 		}
-
 	}
 	request.URL.RawQuery = queryValues.Encode()
 	response, err := c.client.DoWithBody(request, reader)

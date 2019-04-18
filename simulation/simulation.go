@@ -52,7 +52,7 @@ func New(config config.Config, callBackend CallBackend) (*Simulation, error) {
 
 	// start creating root entity sets
 	for _, entitySet := range config.RootEntities {
-		newEntitySet(ctx, entitySet, s.Attributes, s)
+		newEntitySet(ctx, entitySet, copyAttributes(s.Attributes), s)
 	}
 
 	s.wg.Wait()
@@ -132,17 +132,12 @@ func (e *entitySet) create(ctx context.Context, sim *Simulation) {
 			sim.error(errors.Trace(err))
 			return
 		}
-		createEntity(ctx, cfg, e.attributes, sim)
+		createEntity(ctx, cfg, copyAttributes(e.attributes), sim)
 	}
 	return
 }
 
 func createEntity(ctx context.Context, config config.Entity, attributes call.Attributes, sim *Simulation) {
-	// first we copy the attribute map
-	attrs := call.Attributes(make(map[string]interface{}, len(attributes)))
-	for key, value := range attributes {
-		attrs[key] = value
-	}
 	// the we sample the entities attributes
 	for key, config := range config.Attributes {
 		distribution := &AttributeDistribution{
@@ -154,20 +149,12 @@ func createEntity(ctx context.Context, config config.Entity, attributes call.Att
 			return
 		}
 		// and add sampled values to the set of attributes (as strings)
-		attrs[key] = fmt.Sprintf("%f", value)
+		attributes[key] = value
 	}
 
 	// if there are any subordinate entities, we create them
 	for _, esConfig := range config.Subordinates {
-		es := &entitySet{
-			EntitySet:  esConfig,
-			attributes: attrs,
-		}
-		sim.add()
-		go func() {
-			defer sim.done()
-			es.create(ctx, sim)
-		}()
+		newEntitySet(ctx, esConfig, attributes, sim)
 	}
 
 	// if an initial state is defined, we create it and run the state simulation
@@ -179,7 +166,7 @@ func createEntity(ctx context.Context, config config.Entity, attributes call.Att
 		}
 		s := &State{
 			State:      stateConfig,
-			Attributes: attrs,
+			Attributes: copyAttributes(attributes),
 		}
 		sim.add()
 		go func() {
@@ -195,6 +182,22 @@ type State struct {
 	call.Attributes
 }
 
+func (s *State) generateAttributes(ctx context.Context, sim *Simulation) error {
+	// the we sample the state attributes if any are defined
+	for key, config := range s.State.Attributes {
+		distribution := &AttributeDistribution{
+			Attribute: config,
+		}
+		value, err := distribution.Sample()
+		if err != nil {
+			return errors.Trace(err)
+		}
+		// and add sampled values to the set of attributes (as strings)
+		s.Attributes[key] = value
+	}
+	return nil
+}
+
 func (s *State) run(ctx context.Context, sim *Simulation) {
 	// if there are no specified transtions, we just
 	// return and end the simulation
@@ -202,10 +205,16 @@ func (s *State) run(ctx context.Context, sim *Simulation) {
 		return
 	}
 
+	err := s.generateAttributes(ctx, sim)
+	if err != nil {
+		sim.error(errors.Trace(err))
+		return
+	}
+
 	// create a time that defines the transition cadence
 	timer := newTimer(s.Timer)
 	// wait for the timer to fire
-	err := timer.Next(ctx)
+	err = timer.Next(ctx)
 	if err != nil {
 		sim.error(errors.Trace(err))
 		return
@@ -231,11 +240,17 @@ func (s *State) run(ctx context.Context, sim *Simulation) {
 		// if we reached 0 (or less) we choose this transition
 		if randomNumber <= 0 {
 			nextStateName := transition.State
+			attributes := s.Attributes
 
-			attributes, err := sim.Do(ctx, transition.Call, s.Attributes)
-			if err != nil {
-				attributes["error"] = errors.Details(err)
-				nextStateName = transition.OnFailure
+			if !isEmptyCall(transition.Call) {
+				attributes, err = sim.Do(ctx, transition.Call, s.Attributes)
+				if err != nil {
+					zapctx.Error(ctx, "error performing call", zaputil.Error(err))
+					attributes["error"] = errors.Details(err)
+					if transition.OnFailure != "" {
+						nextStateName = transition.OnFailure
+					}
+				}
 			}
 			nextStateConfig, ok := sim.States[nextStateName]
 			if !ok {
@@ -245,15 +260,19 @@ func (s *State) run(ctx context.Context, sim *Simulation) {
 
 			nextState := &State{
 				State:      nextStateConfig,
-				Attributes: attributes,
+				Attributes: copyAttributes(attributes),
 			}
+			sim.add()
 			go func() {
-				sim.add()
 				defer sim.done()
 				nextState.run(ctx, sim)
 			}()
 		}
 	}
+}
+
+func isEmptyCall(call config.Call) bool {
+	return call.Method == "" && call.URL == "" && len(call.Parameters) == 0 && len(call.Results) == 0
 }
 
 type AttributeDistribution struct {
@@ -263,13 +282,17 @@ type AttributeDistribution struct {
 // Sample return a sample float64 from the attribute distribution
 func (a *AttributeDistribution) Sample() (interface{}, error) {
 	switch a.Type {
-	case config.ConstantAttributeType:
+	case config.ConstantIntAttributeType:
 		return a.Value, nil
-	case config.RandomAttributeType:
+	case config.RandomIntAttributeType:
+		return int(math.Floor(a.Min + (a.Max-a.Min)*r.Float64())), nil
+	case config.RandomFloatAttributeType:
 		return a.Min + (a.Max-a.Min)*r.Float64(), nil
-	case config.PowerAttributeType:
+	case config.PowerFloatAttributeType:
 		v := r.Float64()
 		return math.Pow((math.Pow(a.Max, a.N+1)-math.Pow(a.Min, a.N+1))*v+math.Pow(a.Min, a.N+1), (1 / (a.N + 1))), nil
+	case config.NormalFloatAttributeType:
+		return math.Abs(r.NormFloat64()*a.StdDev + a.N), nil
 	case config.ConstantStringAttributeType:
 		return a.StringValue, nil
 	case config.RandomStringAttributeType:
@@ -281,6 +304,24 @@ func (a *AttributeDistribution) Sample() (interface{}, error) {
 			return uuid.String(), nil
 		}
 		return fmt.Sprintf("%s%d", a.StringValue, int(math.Floor(a.Min+(a.Max-a.Min)*r.Float64()))), nil
+	case config.RandomValueAttributeType:
+		if len(a.Values) == 0 {
+			return nil, errors.New("empty list of values")
+		}
+		return a.Values[r.Intn(len(a.Values))], nil
+	case config.RandomSubsetAttributeType:
+		if len(a.Values) == 0 {
+			return nil, errors.New("empty list of values")
+		}
+		values := make(map[int]bool)
+		for i := 0; i < r.Intn(len(a.Values)); i++ {
+			values[r.Intn(len(a.Values))] = true
+		}
+		subset := []interface{}{}
+		for k, _ := range values {
+			subset = append(subset, a.Values[k])
+		}
+		return subset, nil
 	}
 
 	return 0, nil
@@ -289,14 +330,11 @@ func (a *AttributeDistribution) Sample() (interface{}, error) {
 func newTimer(c config.Timer) *timer {
 	return &timer{
 		Timer: c,
-		C:     make(chan time.Time, 1),
 	}
 }
 
 type timer struct {
 	config.Timer
-
-	C chan time.Time
 }
 
 func (t *timer) Next(ctx context.Context) error {
@@ -335,6 +373,14 @@ func (c *cardinality) Value(attributes call.Attributes) (int, error) {
 	case string:
 		return strconv.Atoi(value.(string))
 	default:
-		return -1, errors.Errorf("unknown type: expected int or string")
+		return -1, errors.Errorf("unknown type: expected int or string, got %T", value)
 	}
+}
+
+func copyAttributes(a call.Attributes) call.Attributes {
+	attributes := call.Attributes(make(map[string]interface{}))
+	for k, v := range a {
+		attributes[k] = v
+	}
+	return attributes
 }

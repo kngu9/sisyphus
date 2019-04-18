@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/Shopify/sarama"
-	"github.com/juju/errgo"
+	"github.com/juju/errors"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -75,7 +75,7 @@ func (c *TLSConfig) Config() (*tls.Config, error) {
 		}
 		return config, nil
 	}
-	return nil, errgo.New("certificate not specified")
+	return nil, errors.New("certificate not specified")
 }
 
 // KafkaTLS fetches KAFKA_CLIENT_CERT, KAFKA_CLIENT_KEY and KAFKA_CA_CERT
@@ -88,9 +88,10 @@ func KafkaTLS() (*TLSConfig, error) {
 	if clientCertString == "" && clientKeyString == "" {
 		return nil, nil
 	}
+
 	cert, err := tls.X509KeyPair([]byte(clientCertString), []byte(clientKeyString))
 	if err != nil {
-		return nil, errgo.Mask(err)
+		return nil, errors.Annotate(err, "failed to parse the keypair")
 	}
 	config := TLSConfig{
 		Certificate: &cert,
@@ -98,11 +99,11 @@ func KafkaTLS() (*TLSConfig, error) {
 	if caCertString != "" {
 		pemData, _ := pem.Decode([]byte(caCertString))
 		if pemData == nil {
-			return nil, errgo.New("failed to decode CA certificate")
+			return nil, errors.New("failed to decode CA certificate")
 		}
 		caCert, err := x509.ParseCertificate(pemData.Bytes)
 		if err != nil {
-			return nil, errgo.NoteMask(err, "invalid CA certificate")
+			return nil, errors.Annotate(err, "invalid CA certificate")
 		}
 		config.CACertificate = caCert
 	}

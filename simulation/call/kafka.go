@@ -48,10 +48,12 @@ func (c *kafkaCallBackend) Do(ctx context.Context, call config.Call, attributes 
 	if !ok {
 		return attributes, errors.Errorf("attribute %q not defined", messageTopic)
 	}
-	key, ok := attributes[messageKey]
+	a := Attributes(bodyContent)
+	keyString, ok := attributes[messageKey]
 	if !ok {
 		return attributes, errors.Errorf("attribute %q not defined", messageKey)
 	}
+	key := a.renderMessageKey(keyString.(string))
 	msg := &sarama.ProducerMessage{
 		Topic:     fmt.Sprintf("%v", topic),
 		Key:       sarama.StringEncoder(fmt.Sprintf("%v", key)),
@@ -70,7 +72,11 @@ func (c *kafkaCallBackend) Do(ctx context.Context, call config.Call, attributes 
 	}
 	_, _, err = c.producer.SendMessage(msg)
 	if err != nil {
-		return attributes, errors.Trace(err)
+		return attributes, errors.Annotatef(err, "failed to send to topic %q", topic)
 	}
 	return attributes, nil
+}
+
+func (a *Attributes) renderMessageKey(key string) string {
+	return attributePlaceholder.ReplaceAllStringFunc(key, a.templateValue)
 }

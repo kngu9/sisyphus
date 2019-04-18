@@ -17,7 +17,7 @@ type Config struct {
 	// simulation.
 	Entities map[string]Entity `yaml:"entities"`
 	// States contains all named states in which entities
-	// can be along with transitins between states.
+	// can be along with transitions between states.
 	States map[string]State `yaml:"state"`
 	// Backend specifies which backend to use for state
 	// transition calls.
@@ -47,7 +47,7 @@ type EntitySet struct {
 
 // Entity holds information about an entity in the simulation.
 type Entity struct {
-	// Attributes define named values that can be user
+	// Attributes define named values that can be used
 	// in the simulation and how these values should be set
 	Attributes map[string]Attribute `yaml:"attributes,omitempty"`
 	// InitialState names the initial state in which the entity is
@@ -60,13 +60,18 @@ type Entity struct {
 }
 
 type State struct {
+	// Attributes define named values that can be used in
+	// state transitions.
+	Attributes map[string]Attribute `yaml:"attributes,omitempty"`
 	// Timer defines the cadence at which the state will choose
 	// one of the transtitions to perform.
-	Timer Timer `yaml:"time"`
+	Timer Timer `yaml:"timer,omitempty"`
 	// Transitions holds a list of all transitions from
 	// this state into another.
-	Transitions []Transition `yaml:"transitions"`
+	Transitions []Transition `yaml:"transitions,omitempty"`
 }
+
+// TODO ADD NOP CALL
 
 type Transition struct {
 	// State contains the name of the state into which this
@@ -150,11 +155,15 @@ type Timer struct {
 type AttributeType string
 
 var (
-	ConstantAttributeType       = AttributeType("constant")
-	RandomAttributeType         = AttributeType("random")
-	PowerAttributeType          = AttributeType("power")
+	ConstantIntAttributeType    = AttributeType("int")
+	RandomIntAttributeType      = AttributeType("random_int")
+	RandomFloatAttributeType    = AttributeType("random_float")
+	NormalFloatAttributeType    = AttributeType("normal_float")
+	PowerFloatAttributeType     = AttributeType("power_float")
 	ConstantStringAttributeType = AttributeType("string")
 	RandomStringAttributeType   = AttributeType("random_string")
+	RandomValueAttributeType    = AttributeType("random_value")
+	RandomSubsetAttributeType   = AttributeType("random_subset")
 )
 
 // Attribute holds the definition of the attribute's value or
@@ -170,10 +179,20 @@ type Attribute struct {
 	//          See http://mathworld.wolfram.com/RandomNumber.html
 	//          The attribute's value is derived as
 	//          [(max^(n+1)-min^(n+1))*rand()+min^(n+1)]^(1/(n+1))
+	// - normal: meaning the value will be sampled from a normal
+	//          distribution with mean N and std deviation StdDev
+	// - random_string: meaning a uuid will be created and the
+	//          value returned will be
+	// - random_value: meaning a random value from the Values
+	//          list will be chosen
+	// - random_subset: meaning a random subset of Values will
+	//          be chosen
 	Type        AttributeType `yaml:"type"`
-	StringValue string        `yaml:"sting-value,omitempty"`
+	StringValue string        `yaml:"string-value,omitempty"`
 	Value       float64       `yaml:"value,omitempty"`
 	Min         float64       `yaml:"min,omitempty"`
 	Max         float64       `yaml:"max,omitempty"`
 	N           float64       `yaml:"n,omitempty"`
+	StdDev      float64       `yaml:"std-dev,omitempty"`
+	Values      []interface{} `yaml:"values,omitempty"`
 }
