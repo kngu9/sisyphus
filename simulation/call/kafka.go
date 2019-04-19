@@ -35,6 +35,7 @@ type kafkaCallBackend struct {
 // Do implements the CallBackend interface.
 func (c *kafkaCallBackend) Do(ctx context.Context, call config.Call, attributes Attributes) (Attributes, error) {
 	bodyContent := make(map[string]interface{})
+	bodyContent["timestamp"] = time.Now().Format(time.RFC3339)
 	for _, p := range call.Parameters {
 		if p.Type == config.BodyCallParameterType {
 			bodyContent[p.Key] = attributes[p.Attribute]
