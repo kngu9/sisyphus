@@ -15,7 +15,6 @@ import (
 	"github.com/juju/utils"
 	"github.com/juju/zaputil"
 	"github.com/juju/zaputil/zapctx"
-	"gopkg.in/macaroon-bakery.v1/httpbakery"
 
 	"github.com/cloud-green/sisyphus/config"
 	"github.com/cloud-green/sisyphus/simulation/call"
@@ -36,7 +35,7 @@ type CallBackend interface {
 }
 
 // New returns a new simulation based on the provided configuration.
-func New(config config.Config, callBackend CallBackend) (*Simulation, error) {
+func New(config config.Config, callBackend CallBackend, numberOfWorkers int) *Simulation {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	s := &Simulation{
@@ -45,17 +44,14 @@ func New(config config.Config, callBackend CallBackend) (*Simulation, error) {
 		CallBackend: callBackend,
 		ctx:         ctx,
 		stop:        cancel,
-		client:      httpbakery.NewClient(),
+		e:           newExecutor(numberOfWorkers),
 	}
 
 	// start creating root entity sets
 	for _, entitySet := range config.RootEntities {
 		newEntitySet(ctx, entitySet, copyAttributes(s.Attributes), s)
 	}
-
-	s.wg.Wait()
-
-	return s, nil
+	return s
 }
 
 // Simulation represents a simulation
@@ -65,20 +61,17 @@ type Simulation struct {
 	call.Attributes
 
 	ctx    context.Context
-	wg     sync.WaitGroup
 	errors chan error
 	stop   func()
-	client *httpbakery.Client
+	e      *executor
 }
 
-// add means that a go routing should be added to the wait group
-func (s *Simulation) add() {
-	s.wg.Add(1)
-}
-
-// done means that a go routing has exited
-func (s *Simulation) done() {
-	s.wg.Done()
+// Close stops the simulation and releases all used resources.
+func (s *Simulation) Close() {
+	s.stop()
+	if s.e != nil {
+		s.e.close()
+	}
 }
 
 // error means an error occured during execution of one go routine
@@ -95,16 +88,19 @@ func newEntitySet(ctx context.Context, config config.EntitySet, attributes call.
 		EntitySet:  config,
 		attributes: attributes,
 	}
-	sim.add()
-	go func(ctx context.Context) {
-		defer sim.done()
+	sim.e.addJob(ctx, 0, func() {
 		es.create(ctx, sim)
-	}(ctx)
+	})
 }
 
 type entitySet struct {
 	config.EntitySet
 	attributes call.Attributes
+
+	cfg                     config.Entity
+	numberOfEntities        int
+	mu                      sync.Mutex
+	numberOfCreatedEntities int
 }
 
 func (e *entitySet) create(ctx context.Context, sim *Simulation) {
@@ -114,6 +110,8 @@ func (e *entitySet) create(ctx context.Context, sim *Simulation) {
 		sim.error(errors.NotFoundf("entity %q", e.Entity))
 		return
 	}
+	e.cfg = cfg
+
 	// determine how many entities are to be created
 	c := cardinality(e.Cardinality)
 	numberOfEntities, err := c.Value(e.attributes)
@@ -121,18 +119,31 @@ func (e *entitySet) create(ctx context.Context, sim *Simulation) {
 		sim.error(errors.Trace(err))
 		return
 	}
-	// create the timer that determines the cadence of entity
-	// creation
-	timer := newTimer(e.Timer)
-	for i := 0; i < numberOfEntities; i++ {
-		err = timer.Next(ctx)
-		if err != nil {
-			sim.error(errors.Trace(err))
-			return
-		}
-		createEntity(ctx, cfg, copyAttributes(e.attributes), sim)
-	}
+	e.numberOfEntities = numberOfEntities
+	e.numberOfCreatedEntities = 0
+
+	// add a job that will add all the entities
+	sim.e.addJob(ctx, newDelay(e.Timer), func() {
+		e.createEntity(ctx, sim)
+	})
+
 	return
+}
+
+func (e *entitySet) createEntity(ctx context.Context, sim *Simulation) {
+	e.mu.Lock()
+	if e.numberOfCreatedEntities >= e.numberOfEntities {
+		e.mu.Unlock()
+		return
+	}
+	e.numberOfCreatedEntities++
+	e.mu.Unlock()
+
+	createEntity(ctx, e.cfg, copyAttributes(e.attributes), sim)
+
+	sim.e.addJob(ctx, newDelay(e.Timer), func() {
+		e.createEntity(ctx, sim)
+	})
 }
 
 func createEntity(ctx context.Context, config config.Entity, attributes call.Attributes, sim *Simulation) {
@@ -166,11 +177,9 @@ func createEntity(ctx context.Context, config config.Entity, attributes call.Att
 			State:      stateConfig,
 			Attributes: copyAttributes(attributes),
 		}
-		sim.add()
-		go func() {
-			defer sim.done()
+		sim.e.addJob(ctx, 0, func() {
 			s.run(ctx, sim)
-		}()
+		})
 	}
 
 }
@@ -202,21 +211,19 @@ func (s *State) run(ctx context.Context, sim *Simulation) {
 	if len(s.Transitions) == 0 {
 		return
 	}
+	delay := newDelay(s.Timer)
+	sim.e.addJob(ctx, delay, func() {
+		s.runTransition(ctx, sim)
+	})
+}
 
+func (s *State) runTransition(ctx context.Context, sim *Simulation) {
 	err := s.generateAttributes(ctx, sim)
 	if err != nil {
 		sim.error(errors.Trace(err))
 		return
 	}
 
-	// create a time that defines the transition cadence
-	timer := newTimer(s.Timer)
-	// wait for the timer to fire
-	err = timer.Next(ctx)
-	if err != nil {
-		sim.error(errors.Trace(err))
-		return
-	}
 	// calculate the sum of transition weigths
 	sum := 0.0
 	for _, transition := range s.Transitions {
@@ -260,11 +267,9 @@ func (s *State) run(ctx context.Context, sim *Simulation) {
 				State:      nextStateConfig,
 				Attributes: copyAttributes(attributes),
 			}
-			sim.add()
-			go func() {
-				defer sim.done()
+			sim.e.addJob(ctx, 0, func() {
 				nextState.run(ctx, sim)
-			}()
+			})
 		}
 	}
 }
@@ -284,11 +289,19 @@ func (a *AttributeDistribution) Sample() (interface{}, error) {
 		return a.Value, nil
 	case config.RandomIntAttributeType:
 		return int(math.Floor(a.Min + (a.Max-a.Min)*rand.Float64())), nil
+	case config.PowerIntAttributeType:
+		v := rand.Float64()
+		nn := a.N + 1
+		sample := math.Pow((math.Pow(a.Max, nn)-math.Pow(a.Min, nn))*v+math.Pow(a.Min, nn), (1 / nn))
+		return int(math.Floor(sample)), nil
+	case config.NormalIntAttributeType:
+		return int(math.Floor(math.Abs(rand.NormFloat64()*a.StdDev + a.N))), nil
 	case config.RandomFloatAttributeType:
 		return a.Min + (a.Max-a.Min)*rand.Float64(), nil
 	case config.PowerFloatAttributeType:
 		v := rand.Float64()
-		return math.Pow((math.Pow(a.Max, a.N+1)-math.Pow(a.Min, a.N+1))*v+math.Pow(a.Min, a.N+1), (1 / (a.N + 1))), nil
+		nn := a.N + 1
+		return math.Pow((math.Pow(a.Max, nn)-math.Pow(a.Min, nn))*v+math.Pow(a.Min, nn), (1 / nn)), nil
 	case config.NormalFloatAttributeType:
 		return math.Abs(rand.NormFloat64()*a.StdDev + a.N), nil
 	case config.ConstantStringAttributeType:
@@ -328,32 +341,17 @@ func (a *AttributeDistribution) Sample() (interface{}, error) {
 	return 0, nil
 }
 
-func newTimer(c config.Timer) *timer {
-	return &timer{
-		Timer: c,
-	}
-}
-
-type timer struct {
-	config.Timer
-}
-
-func (t *timer) Next(ctx context.Context) error {
+func newDelay(c config.Timer) time.Duration {
 	var duration time.Duration
-	switch t.Type {
+	switch c.Type {
 	case config.FixedTimer:
-		duration = t.Interval
+		duration = c.Interval
 	case config.RandomTimer:
-		duration = time.Duration(int64(t.Min) + rand.Int63n(int64(t.Max-t.Min)))
+		duration = time.Duration(int64(c.Min) + rand.Int63n(int64(c.Max-c.Min)))
 	case "":
 		duration = 0
 	}
-	select {
-	case <-time.After(duration):
-		return nil
-	case <-ctx.Done():
-		return contextDoneError
-	}
+	return duration
 }
 
 type cardinality string

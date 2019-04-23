@@ -19,6 +19,8 @@ const (
 	messageTopic = "message-topic"
 )
 
+var timeNow = time.Now
+
 // NewKafkaCallBackend returns a new call backend that sends json formatted
 // parameters to Kafka. It does not return any new paramters, as there is
 // bo result expected from Kafka.
@@ -35,7 +37,7 @@ type kafkaCallBackend struct {
 // Do implements the CallBackend interface.
 func (c *kafkaCallBackend) Do(ctx context.Context, call config.Call, attributes Attributes) (Attributes, error) {
 	bodyContent := make(map[string]interface{})
-	bodyContent["timestamp"] = time.Now().Format(time.RFC3339)
+	bodyContent["timestamp"] = timeNow().Format(time.RFC3339)
 	for _, p := range call.Parameters {
 		if p.Type == config.BodyCallParameterType {
 			bodyContent[p.Key] = attributes[p.Attribute]
@@ -60,7 +62,7 @@ func (c *kafkaCallBackend) Do(ctx context.Context, call config.Call, attributes 
 		Key:       sarama.StringEncoder(fmt.Sprintf("%v", key)),
 		Value:     sarama.ByteEncoder(data),
 		Headers:   []sarama.RecordHeader{},
-		Timestamp: time.Now(),
+		Timestamp: timeNow(),
 	}
 
 	for _, p := range call.Parameters {
