@@ -37,6 +37,8 @@ func main() {
 
 	var callBackend simulation.CallBackend
 	switch simConfig.Backend {
+	case "nop":
+		callBackend = call.NewNOPCallBackend()
 	case "http":
 		callBackend = call.NewHTTPCallBackend(httpbakery.NewClient())
 	case "kafka":

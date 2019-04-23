@@ -284,11 +284,19 @@ func (a *AttributeDistribution) Sample() (interface{}, error) {
 		return a.Value, nil
 	case config.RandomIntAttributeType:
 		return int(math.Floor(a.Min + (a.Max-a.Min)*rand.Float64())), nil
+	case config.PowerIntAttributeType:
+		v := rand.Float64()
+		nn := a.N + 1
+		sample := math.Pow((math.Pow(a.Max, nn)-math.Pow(a.Min, nn))*v+math.Pow(a.Min, nn), (1 / nn))
+		return int(math.Floor(sample)), nil
+	case config.NormalIntAttributeType:
+		return int(math.Floor(math.Abs(rand.NormFloat64()*a.StdDev + a.N))), nil
 	case config.RandomFloatAttributeType:
 		return a.Min + (a.Max-a.Min)*rand.Float64(), nil
 	case config.PowerFloatAttributeType:
 		v := rand.Float64()
-		return math.Pow((math.Pow(a.Max, a.N+1)-math.Pow(a.Min, a.N+1))*v+math.Pow(a.Min, a.N+1), (1 / (a.N + 1))), nil
+		nn := a.N + 1
+		return math.Pow((math.Pow(a.Max, nn)-math.Pow(a.Min, nn))*v+math.Pow(a.Min, nn), (1 / nn)), nil
 	case config.NormalFloatAttributeType:
 		return math.Abs(rand.NormFloat64()*a.StdDev + a.N), nil
 	case config.ConstantStringAttributeType:
