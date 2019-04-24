@@ -157,6 +157,8 @@ type AttributeType string
 var (
 	ConstantIntAttributeType    = AttributeType("int")
 	RandomIntAttributeType      = AttributeType("random_int")
+	NormalIntAttributeType      = AttributeType("normal_int")
+	PowerIntAttributeType       = AttributeType("power_int")
 	RandomFloatAttributeType    = AttributeType("random_float")
 	NormalFloatAttributeType    = AttributeType("normal_float")
 	PowerFloatAttributeType     = AttributeType("power_float")
