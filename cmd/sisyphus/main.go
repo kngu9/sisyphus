@@ -5,6 +5,9 @@ package main
 import (
 	"context"
 	"io/ioutil"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/Shopify/sarama"
 	"github.com/juju/zaputil"
@@ -91,9 +94,17 @@ func main() {
 		return
 	}
 
-	_, err = simulation.New(simConfig, callBackend)
+	numberOfWorkers, err := Workers()
 	if err != nil {
-		zapctx.Error(ctx, "failed to execute simulation", zaputil.Error(err))
+		zapctx.Error(ctx, "failed to parse the number of workers", zaputil.Error(err))
 		return
 	}
+
+	s := simulation.New(simConfig, callBackend, numberOfWorkers)
+
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	<-c
+	s.Close()
+	os.Exit(1)
 }

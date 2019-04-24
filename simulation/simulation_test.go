@@ -52,6 +52,7 @@ state:
 func TestSimulation(t *testing.T) {
 	c := qt.New(t)
 	callBackend := &testCallBackend{
+		calls:              make(chan config.Call, 1),
 		responseAttributes: make(map[string]call.Attributes),
 	}
 
@@ -59,10 +60,10 @@ func TestSimulation(t *testing.T) {
 	err := yaml.Unmarshal([]byte(simpleSim), &simConfig)
 	c.Assert(err, qt.IsNil)
 
-	_, err = simulation.New(simConfig, callBackend)
-	c.Assert(err, qt.IsNil)
+	s := simulation.New(simConfig, callBackend, 1)
 
-	c.Assert(callBackend.calls, qt.DeepEquals, []config.Call{{
+	call := <-callBackend.calls
+	c.Assert(call, qt.DeepEquals, config.Call{
 		Method: "GET",
 		URL:    "http://{service-url}/login",
 		Parameters: []config.CallParameter{{
@@ -74,17 +75,20 @@ func TestSimulation(t *testing.T) {
 			Key:       "message",
 			Attribute: "message",
 		}},
-	}})
+	})
+	s.Close()
 }
 
 type testCallBackend struct {
 	responseAttributes map[string]call.Attributes
 	responseError      error
-	calls              []config.Call
+	calls              chan config.Call
 }
 
 func (b *testCallBackend) Do(ctx context.Context, callConfig config.Call, attributes call.Attributes) (call.Attributes, error) {
-	b.calls = append(b.calls, callConfig)
+	defer func() {
+		b.calls <- callConfig
+	}()
 	if b.responseError != nil {
 		return attributes, b.responseError
 	}

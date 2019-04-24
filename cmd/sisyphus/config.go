@@ -6,7 +6,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"flag"
+	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/Shopify/sarama"
@@ -14,21 +17,68 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+var (
+	logLevel            string
+	configPath          string
+	kafkaClientID       string
+	kafkaBrokers        string
+	kafkaClientCertPath string
+	kafkaClientKeyPath  string
+	kafkaCAPath         string
+	workers             int
+)
+
+func init() {
+	flag.StringVar(&logLevel, "log-level", "", "logging level")
+	flag.StringVar(&configPath, "config", "", "configuration file path")
+	flag.StringVar(&kafkaClientID, "kafka-client-id", "", "kafka client id")
+	flag.StringVar(&kafkaBrokers, "kafka-brokers", "", "kafka brokers")
+	flag.StringVar(&kafkaClientCertPath, "kafka-cert", "", "kafka client cert")
+	flag.StringVar(&kafkaClientKeyPath, "kafka-key", "", "kafka client key")
+	flag.StringVar(&kafkaCAPath, "kafka-ca", "", "kafka ca cert")
+	flag.IntVar(&workers, "workers", 0, "number of workers")
+}
+
+func Workers() (int, error) {
+	if workers != 0 {
+		return workers, nil
+	}
+	if number := os.Getenv("WORKERS"); number != "" {
+		n, err := strconv.Atoi(number)
+		if err != nil {
+			return 0, errors.Trace(err)
+		}
+		return n, nil
+	}
+	return 16, nil
+}
+
 // LogLevel returns the level of logging to perform. If the
 // environment variable is not set, the level will be the default
 // INFO level.
 func LogLevel() zapcore.Level {
 	var level zapcore.Level
-	level.UnmarshalText([]byte(os.Getenv("LOGLEVEL")))
+	if logLevel != "" {
+		level.UnmarshalText([]byte(logLevel))
+
+	} else {
+		level.UnmarshalText([]byte(os.Getenv("LOGLEVEL")))
+	}
 	return level
 }
 
 // Config returns the CONFIG environment variable.
 func Config() string {
+	if configPath != "" {
+		return configPath
+	}
 	return os.Getenv("CONFIG")
 }
 
 func KafkaClientID() string {
+	if kafkaClientID != "" {
+		return kafkaClientID
+	}
 	id := os.Getenv("KAFKA_CLIENT_ID")
 	if id == "" {
 		return "sisyphus_simulation"
@@ -46,6 +96,9 @@ func KafkaVersion() (sarama.KafkaVersion, error) {
 
 // KafkaBrokerURLs returns the KAFKA_BROKERS environment variable
 func KafkaBrokerURLs() []string {
+	if kafkaBrokers != "" {
+		return strings.Split(kafkaBrokers, ",")
+	}
 	brokers := os.Getenv("KAFKA_BROKERS")
 	if brokers == "" {
 		return nil
@@ -78,12 +131,54 @@ func (c *TLSConfig) Config() (*tls.Config, error) {
 	return nil, errors.New("certificate not specified")
 }
 
+func kafkaCert() (string, error) {
+	if kafkaClientCertPath != "" {
+		cert, err := ioutil.ReadFile(kafkaClientCertPath)
+		if err != nil {
+			return "", errors.Trace(err)
+		}
+		return string(cert), nil
+	}
+	return os.Getenv("KAFKA_CLIENT_CERT"), nil
+}
+
+func kafkaKey() (string, error) {
+	if kafkaClientKeyPath != "" {
+		key, err := ioutil.ReadFile(kafkaClientKeyPath)
+		if err != nil {
+			return "", errors.Trace(err)
+		}
+		return string(key), nil
+	}
+	return os.Getenv("KAFKA_CLIENT_KEY"), nil
+}
+
+func kafkaCA() (string, error) {
+	if kafkaCAPath != "" {
+		cert, err := ioutil.ReadFile(kafkaCAPath)
+		if err != nil {
+			return "", errors.Trace(err)
+		}
+		return string(cert), nil
+	}
+	return os.Getenv("KAFKA_CA_CERT"), nil
+}
+
 // KafkaTLS fetches KAFKA_CLIENT_CERT, KAFKA_CLIENT_KEY and KAFKA_CA_CERT
 // environment variables and returns a tls config structure.
 func KafkaTLS() (*TLSConfig, error) {
-	clientCertString := os.Getenv("KAFKA_CLIENT_CERT")
-	clientKeyString := os.Getenv("KAFKA_CLIENT_KEY")
-	caCertString := os.Getenv("KAFKA_CA_CERT")
+	clientCertString, err := kafkaCert()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	clientKeyString, err := kafkaKey()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	caCertString, err := kafkaCA()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 
 	if clientCertString == "" && clientKeyString == "" {
 		return nil, nil

@@ -4,7 +4,9 @@ package call_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/Shopify/sarama"
 	qt "github.com/frankban/quicktest"
@@ -23,6 +25,11 @@ var (
 
 func TestKafkaCallBackend(t *testing.T) {
 	c := qt.New(t)
+
+	now := time.Now()
+	*call.TimeNow = func() time.Time {
+		return now
+	}
 
 	tests := []struct {
 		about              string
@@ -44,7 +51,7 @@ func TestKafkaCallBackend(t *testing.T) {
 		expectedMessage: &sarama.ProducerMessage{
 			Topic:   "test-topic",
 			Key:     sarama.StringEncoder("test-key"),
-			Value:   sarama.ByteEncoder([]byte(`{}`)),
+			Value:   sarama.ByteEncoder([]byte(fmt.Sprintf(`{"timestamp":%q}`, now.Format(time.RFC3339)))),
 			Headers: []sarama.RecordHeader{},
 		},
 	}, {
@@ -75,7 +82,7 @@ func TestKafkaCallBackend(t *testing.T) {
 		expectedMessage: &sarama.ProducerMessage{
 			Topic: "test-topic",
 			Key:   sarama.StringEncoder("test-key"),
-			Value: sarama.ByteEncoder([]byte(`{"count":10,"message":"hello world"}`)),
+			Value: sarama.ByteEncoder([]byte(fmt.Sprintf(`{"count":10,"message":"hello world","timestamp":%q}`, now.Format(time.RFC3339)))),
 			Headers: []sarama.RecordHeader{{
 				Key:   []byte("token"),
 				Value: []byte("secret"),
