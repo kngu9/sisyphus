@@ -1,0 +1,37 @@
+name: sisyphus
+base: core18
+version: '0.1'
+summary: Multi-agent simulation tool
+description: |
+  Sisyphus is a multi-agent simulation model for testing web and messaging
+  systems. Agents are represented as state machines that can execute state
+  transitions and generate activity with statistical probability.
+
+grade: devel
+confinement: strict
+
+apps:
+  sisyphus:
+    command: sisyphus-wrapper.bash
+    plugs:
+    - network
+    - network-bind
+
+parts:
+  sisyphus:
+    plugin: go
+    source: .
+    go-packages:
+    - github.com/cloud-green/sisyphus/cmd/sisyphus
+    override-build: |-
+      cd $SNAPCRAFT_PART_INSTALL/../src
+      mkdir -p $SNAPCRAFT_PART_INSTALL/bin
+      go get ./...
+      go build -o $SNAPCRAFT_PART_INSTALL/bin/sisyphus ./cmd/sisyphus
+    build-packages:
+    - bzr
+    - git
+    - gcc
+  wrapper:
+    plugin: dump
+    source: snap/local
