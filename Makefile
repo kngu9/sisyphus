@@ -5,7 +5,7 @@ all: snap lint charm
 
 .PHONY: lint
 lint:
-	flake8
+	flake8 --ignore=E121,E123,E126,E226,E24,E704,E265 charm/sisyphus
 
 .PHONY: snap
 snap: sisyphus_$(KAFKA_VERSION)_amd64.snap

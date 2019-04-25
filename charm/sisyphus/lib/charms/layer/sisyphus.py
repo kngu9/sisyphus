@@ -1,17 +1,14 @@
 import os
-import shutil
 import re
 import socket
+import signal
 
 from pathlib import Path
 from base64 import b64encode
 
-from charmhelpers.core import hookenv, host
+from charmhelpers.core import hookenv
 from charmhelpers.core.templating import render
 
-from charms.reactive.relations import RelationBase
-
-from charms.layer import snap
 
 SISYPHUS_SNAP = 'sisyphus'
 SISYPHUS_COMMON = '/var/snap/{}/common'.format(SISYPHUS_SNAP)
@@ -20,33 +17,53 @@ SISYPHUS_COMMON = '/var/snap/{}/common'.format(SISYPHUS_SNAP)
 class Sisyphus(object):
     @staticmethod
     def install(cfg=hookenv.config()['config']):
-        '''
-        Generates client-ssl.properties and server.properties with the current
-        system state.
-        '''
         render(
             None,
             os.path.join(SISYPHUS_COMMON, "config.yaml"),
             config_template=cfg,
+            context={},
             perms=0o644
         )
 
+    def __init__(self):
+        self.lock_path = os.path.join(
+            os.sep, 'var', 'run', 'sisyphus', 'pid'
+        )
 
-def keystore_password():
-    path = os.path.join(
-        SISYPHUS_COMMON,
-        'keystore.secret'
-    )
-    if not os.path.isfile(path):
-        with os.fdopen(
-                os.open(path, os.O_WRONLY | os.O_CREAT, 0o440),
-                'wb') as f:
-            token = b64encode(os.urandom(32))
-            f.write(token)
-            password = token.decode('ascii')
-    else:
-        password = Path(path).read_text().rstrip()
-    return password
+        if not os.path.isfile(self.lock_path):
+            os.makedirs(os.path.dirname(self.lock_path))
+
+            open(self.lock_path, 'w+').close()
+            os.chmod(self.lock_path, 0o644)
+
+    def get_pid(self):
+        buff = None
+
+        with open(self.lock_path, 'r') as f:
+            buff = f.read()
+
+        if not buff:
+            return -1
+
+        return int(buff)
+    
+    def lock_pid(self, pid):
+        with open(self.lock_path, 'w+') as f:
+            f.write(str(pid))
+
+    def is_running(self):
+        pid = self.get_pid()
+        return os.path.exists(os.path.join('proc', str(pid)))
+
+    def terminate(self, signal=signal.SIGTERM):
+        pid = self.get_pid()
+
+        if pid != -1 and self.is_running():
+            os.kill(pid, signal)
+    
+    def clear_pid(self):
+        with open(self.lock_path, 'w+') as f:
+            f.write('')
 
 
 def resolve_private_address(addr):

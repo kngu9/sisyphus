@@ -2,21 +2,21 @@ from charms.layer.sisyphus import Sisyphus
 
 from charms.reactive import helpers, when, when_not, set_flag, clear_flag
 
-from charmhelpers.core import hookenv, unitdata
+from charmhelpers.core import hookenv
 
 
 def install():
     cfg = hookenv.config()['config']
-    if cfg:
-        unitdata.kv().set('sisyphus.config', cfg)
-        helpers.data_changed('sisyphus.config', cfg)
+    if not cfg:
+        clear_flag('sisyphus.configured')
+        hookenv.status_set('blocked', 'waiting for configuration')
+        return
 
+    if helpers.data_changed('sisyphus.config', cfg):
         Sisyphus.install(cfg=cfg)
 
-        set_flag('sisyphus.configured')
-        hookenv.status_set('idle', 'waiting for further commands')
-    else:
-        hookenv.status_set('blocked', 'waiting for configuration') 
+    set_flag('sisyphus.configured')
+    hookenv.status_set('waiting', 'waiting for further commands')
 
 
 @when_not('sisyphus.installed')

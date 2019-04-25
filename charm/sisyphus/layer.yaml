@@ -3,6 +3,7 @@ includes:
 - 'interface:tls-certificates'
 - 'layer:tls-client'
 - 'layer:snap'
+- 'interface:kafka'
 
 options:
   basic:

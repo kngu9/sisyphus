@@ -1,0 +1,17 @@
+#!/usr/local/sbin/charm-env python3
+
+import sys
+import os
+import signal
+import sisyphus_utils
+
+from charms.layer.sisyphus import Sisyphus
+
+
+sisyphus = Sisyphus()
+if not sisyphus.is_running():
+    sisyphus_utils.fail('sisyphus is not running on this unit')
+
+os.kill(sisyphus.get_pid(), signal.SIGTERM)
+
+sys.exit(0)

@@ -1,5 +1,71 @@
 #!/usr/local/sbin/charm-env python3
 
+import os
 import sys
+import yaml
+import subprocess
+
+import sisyphus_utils
+
+from charms.layer.sisyphus import (Sisyphus,
+                                   resolve_private_address, SISYPHUS_COMMON)
+
+from charmhelpers.core import hookenv, unitdata
+
+CRT_PATH = os.path.join(
+    SISYPHUS_COMMON,
+    'client.crt',
+)
+KEY_PATH = os.path.join(
+    SISYPHUS_COMMON,
+    'client.key',
+)
+
+sisyphus = Sisyphus()
+if sisyphus.is_running():
+    sisyphus_utils.fail('sisyphus is already running on this unit')
+
+cfg = hookenv.config()
+if not cfg:
+    sisyphus_utils.fail('config has not been set')
+
+cfgObj = yaml.load(cfg['config'])
+if not cfgObj:
+    sisyphus_utils.fail('unable to parse config')
+
+if 'backend' not in cfgObj:
+    sisyphus_utils.fail('backend was not specified in config')
+
+if cfgObj['backend'] != 'kafka':
+    sisyphus_utils.fail('kafka is currently only supported')
+
+kafka_units = unitdata.kv().get('sisyphus.kafkas')
+
+if not kafka_units or len(kafka_units) < 1:
+    sisyphus_utils.fail('no kafka units available')
+
+kafka = []
+for unit in kafka_units:
+    ip = resolve_private_address(unit['host'])
+    kafka.append('{}:{}'.format(ip, unit['port']))
+
+cmd = [
+    '/snap/bin/sisyphus',
+    '--kafka-brokers', ','.join(kafka),
+    '--kafka-client-id', hookenv.action_get('kafka-client-id'),
+    '--workers', str(hookenv.action_get('workers'))
+]
+
+if os.path.isfile(CRT_PATH) and os.path.isfile(KEY_PATH):
+    cmd += [
+        '--kafka-cert', CRT_PATH,
+        '--kafka-key', KEY_PATH,
+        '--kafka-ca', CRT_PATH
+    ]
+
+with open("/var/log/syslog","wb") as out:
+    pid = subprocess.Popen(cmd, stdout=subprocess.PIPE).pid
+
+sisyphus.lock_pid(pid)
 
 sys.exit(0)
