@@ -1,0 +1,22 @@
+name: sisyphus
+summary: Multi-agent simulation tool
+maintainer: Khanh Nguyen <Khanh.Nguyen@canonical.com>
+description: |
+  Sisyphus is a multi-agent simulation model for testing web and messaging
+  systems. Agents are represented as state machines that can execute state
+  transitions and generate activity with statistical probability.
+tags:
+  - misc
+series:
+  - bionic
+subordinate: false
+
+requires:
+  kafka:
+    interface: kafka
+
+resources:
+  sisyphus:
+    type: file
+    filename: sisyphus.snap
+    description: Sisyphus snap package

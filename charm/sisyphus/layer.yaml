@@ -1,0 +1,14 @@
+includes:
+- 'layer:basic'
+- 'interface:tls-certificates'
+- 'layer:tls-client'
+- 'layer:snap'
+
+options:
+  basic:
+    packages:
+      - default-jre-headless
+  snap:
+    sisyphus: {}
+
+repo: https://github.com/cloud-green/sisyphus.git

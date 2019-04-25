@@ -19,4 +19,4 @@ if [ -z "$CONFIG" ]; then
 	exit 1
 fi
 
-exec $SNAP/bin/sisyphus
+exec $SNAP/bin/sisyphus "$@"

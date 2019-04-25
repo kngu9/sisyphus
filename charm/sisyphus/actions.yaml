@@ -1,0 +1,13 @@
+start:
+  description: Starts sisyphus
+  params:
+    kafka-client-id:
+      type: string
+      description: kafka client id that sisyphus will use
+    workers:
+      type: string
+      description: number of workers that sisyphus will use
+  required:
+  - entries
+  - workers
+  additionalProperties: false
