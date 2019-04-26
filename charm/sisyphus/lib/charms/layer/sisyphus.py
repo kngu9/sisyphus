@@ -12,7 +12,18 @@ from charmhelpers.core.templating import render
 
 SISYPHUS_SNAP = 'sisyphus'
 SISYPHUS_COMMON = '/var/snap/{}/common'.format(SISYPHUS_SNAP)
-
+SISYPHUS_CERT = os.path.join(
+    SISYPHUS_COMMON,
+    'client.crt',
+)
+SISYPHUS_KEY = os.path.join(
+    SISYPHUS_COMMON,
+    'client.key',
+)
+SISYPHUS_CA_CERT = os.path.join(
+    SISYPHUS_COMMON,
+    'ca.crt',
+)
 
 class Sisyphus(object):
     @staticmethod

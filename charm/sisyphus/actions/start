@@ -8,18 +8,11 @@ import subprocess
 import sisyphus_utils
 
 from charms.layer.sisyphus import (Sisyphus,
-                                   resolve_private_address, SISYPHUS_COMMON)
+                                   resolve_private_address, SISYPHUS_CERT,
+                                   SISYPHUS_KEY, SISYPHUS_CA_CERT)
 
 from charmhelpers.core import hookenv, unitdata
 
-CRT_PATH = os.path.join(
-    SISYPHUS_COMMON,
-    'client.crt',
-)
-KEY_PATH = os.path.join(
-    SISYPHUS_COMMON,
-    'client.key',
-)
 
 sisyphus = Sisyphus()
 if sisyphus.is_running():
@@ -56,11 +49,13 @@ cmd = [
     '--workers', str(hookenv.action_get('workers'))
 ]
 
-if os.path.isfile(CRT_PATH) and os.path.isfile(KEY_PATH):
+if all((os.path.isfile(SISYPHUS_CERT),
+       os.path.isfile(SISYPHUS_KEY),
+       os.path.isfile(SISYPHUS_CA_CERT))):
     cmd += [
-        '--kafka-cert', CRT_PATH,
-        '--kafka-key', KEY_PATH,
-        '--kafka-ca', CRT_PATH
+        '--kafka-cert', SISYPHUS_CERT,
+        '--kafka-key', SISYPHUS_KEY,
+        '--kafka-ca', SISYPHUS_CA_CERT
     ]
 
 with open("/var/log/syslog","wb") as out:
