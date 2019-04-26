@@ -42,13 +42,14 @@ for unit in kafka_units:
     ip = resolve_private_address(unit['host'])
     kafka.append('{}:{}'.format(ip, unit['port']))
 
+my_env = os.environ.copy()
+my_env["PATH"] = "/usr/sbin:/sbin:" + my_env["PATH"]
 cmd = [
-    '/snap/bin/sisyphus',
+    'nohup', '/snap/bin/sisyphus',
     '--kafka-brokers', ','.join(kafka),
     '--kafka-client-id', hookenv.action_get('kafka-client-id'),
     '--workers', str(hookenv.action_get('workers'))
 ]
-
 if all((os.path.isfile(SISYPHUS_CERT),
        os.path.isfile(SISYPHUS_KEY),
        os.path.isfile(SISYPHUS_CA_CERT))):
@@ -57,9 +58,9 @@ if all((os.path.isfile(SISYPHUS_CERT),
         '--kafka-key', SISYPHUS_KEY,
         '--kafka-ca', SISYPHUS_CA_CERT
     ]
+cmd += ['&']
 
-with open("/var/log/syslog","wb") as out:
-    pid = subprocess.Popen(cmd, stdout=subprocess.PIPE).pid
+pid = subprocess.Popen(cmd, env=my_env).pid
 
 sisyphus.lock_pid(pid)
 
