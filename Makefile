@@ -8,7 +8,7 @@ lint:
 	flake8 --ignore=E121,E123,E126,E226,E24,E704,E265 charm/sisyphus
 
 .PHONY: snap
-snap: sisyphus_$(KAFKA_VERSION)_amd64.snap
+snap: sisyphus_$(SISYPHUS_VERSION)_amd64.snap
 
 .PHONY: charm
 charm: charm/builds/sisyphus
@@ -19,3 +19,11 @@ charm/builds/sisyphus:
 .PHONY: clean-charm
 clean-charm:
 	$(RM) -r charm/builds charm/deps
+
+.PHONY: clean-snap
+clean-snap:
+	$(RM) sisyphus_$(SISYPHUS_VERSION)_amd64.snap
+	snapcraft clean
+
+.PHONY: clean
+clean: clean-charm clean-snap
