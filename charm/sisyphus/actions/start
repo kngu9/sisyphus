@@ -67,7 +67,8 @@ if all((os.path.isfile(SISYPHUS_CERT),
 cmd += ['&']
 
 pid = subprocess.Popen(cmd, env=my_env).pid
-
 sisyphus.lock_pid(pid)
+
+hookenv.status_set('active', 'sisyphus is running')
 
 sys.exit(0)
