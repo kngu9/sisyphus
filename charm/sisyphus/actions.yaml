@@ -1,0 +1,6 @@
+start:
+  description: Starts sisyphus
+  additionalProperties: false
+stop:
+  description: Stops sisyphus
+  additionalProperties: false

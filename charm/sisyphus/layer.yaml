@@ -1,0 +1,12 @@
+includes:
+- 'layer:basic'
+- 'interface:tls-certificates'
+- 'layer:tls-client'
+- 'layer:snap'
+- 'interface:kafka'
+
+options:
+  snap:
+    sisyphus: {}
+
+repo: https://github.com/cloud-green/sisyphus.git

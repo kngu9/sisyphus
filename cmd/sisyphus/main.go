@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -24,6 +25,8 @@ import (
 func main() {
 	zapctx.LogLevel.SetLevel(LogLevel())
 	ctx := context.Background()
+
+	flag.Parse()
 
 	data, err := ioutil.ReadFile(Config())
 	if err != nil {

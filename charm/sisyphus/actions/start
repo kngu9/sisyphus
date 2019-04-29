@@ -1,0 +1,74 @@
+#!/usr/local/sbin/charm-env python3
+
+import os
+import sys
+import yaml
+import subprocess
+
+import sisyphus_utils
+
+from charms.layer.sisyphus import (Sisyphus,
+                                   resolve_private_address, SISYPHUS_CERT,
+                                   SISYPHUS_KEY, SISYPHUS_CA_CERT)
+
+from charmhelpers.core import hookenv, unitdata
+
+
+sisyphus = Sisyphus()
+if sisyphus.is_running():
+    sisyphus_utils.fail('sisyphus is already running on this unit')
+
+cfg = hookenv.config()
+if not cfg:
+    sisyphus_utils.fail('config has not been set')
+
+cfgObj = yaml.load(cfg['config'])
+if not cfgObj:
+    sisyphus_utils.fail('unable to parse config')
+
+if 'backend' not in cfgObj:
+    sisyphus_utils.fail('backend was not specified in config')
+
+if cfgObj['backend'] != 'kafka':
+    sisyphus_utils.fail('kafka is currently only supported')
+
+kafka_units = unitdata.kv().get('sisyphus.kafkas')
+
+if not kafka_units or len(kafka_units) < 1:
+    sisyphus_utils.fail('no kafka units available')
+
+kafka = []
+for unit in kafka_units:
+    ip = resolve_private_address(unit['host'])
+    kafka.append('{}:{}'.format(ip, unit['port']))
+
+my_env = os.environ.copy()
+my_env["PATH"] = "/usr/sbin:/sbin:" + my_env["PATH"]
+
+try:
+    val = int(cfg['workers'])
+except ValueError:
+    sisyphus_utils.fail("workers config option is not a valid int")
+
+cmd = [
+    'nohup', '/snap/bin/sisyphus',
+    '--kafka-brokers', ','.join(kafka),
+    '--kafka-client-id', cfg['kafka-client-id'],
+    '--workers', cfg['workers']
+]
+if all((os.path.isfile(SISYPHUS_CERT),
+       os.path.isfile(SISYPHUS_KEY),
+       os.path.isfile(SISYPHUS_CA_CERT))):
+    cmd += [
+        '--kafka-cert', SISYPHUS_CERT,
+        '--kafka-key', SISYPHUS_KEY,
+        '--kafka-ca', SISYPHUS_CA_CERT
+    ]
+cmd += ['&']
+
+pid = subprocess.Popen(cmd, env=my_env).pid
+sisyphus.lock_pid(pid)
+
+hookenv.status_set('active', 'sisyphus is running')
+
+sys.exit(0)
