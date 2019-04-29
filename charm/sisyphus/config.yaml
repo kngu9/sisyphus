@@ -3,3 +3,13 @@ options:
     type: string
     description: |-
       The configuration for Sisyphus
+  kafka-client-id:
+    type: string
+    default: sisyphus
+    description: |-
+      The kafka client id that sisyphus will run undeer
+  workers:
+    type: string
+    default: '1'
+    description: |-
+      The number of workers that sisyphus will spawn

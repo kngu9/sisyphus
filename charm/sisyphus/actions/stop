@@ -12,8 +12,6 @@ sisyphus = Sisyphus()
 if not sisyphus.is_running():
     sisyphus_utils.fail('sisyphus is not running on this unit')
 
-os.kill(sisyphus.get_pid(), signal.SIGTERM)
-
-sisyphus.clear_pid()
+sisyphus.terminate()
 
 sys.exit(0)

@@ -44,11 +44,17 @@ for unit in kafka_units:
 
 my_env = os.environ.copy()
 my_env["PATH"] = "/usr/sbin:/sbin:" + my_env["PATH"]
+
+try:
+    val = int(cfg['workers'])
+except ValueError:
+    sisyphus_utils.fail("workers config option is not a valid int")
+
 cmd = [
     'nohup', '/snap/bin/sisyphus',
     '--kafka-brokers', ','.join(kafka),
-    '--kafka-client-id', hookenv.action_get('kafka-client-id'),
-    '--workers', str(hookenv.action_get('workers'))
+    '--kafka-client-id', cfg['kafka-client-id'],
+    '--workers', cfg['workers']
 ]
 if all((os.path.isfile(SISYPHUS_CERT),
        os.path.isfile(SISYPHUS_KEY),

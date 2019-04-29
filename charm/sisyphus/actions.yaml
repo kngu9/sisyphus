@@ -1,16 +1,6 @@
 start:
   description: Starts sisyphus
-  params:
-    kafka-client-id:
-      type: string
-      default: sisyphus
-      description: kafka client id that sisyphus will use
-    workers:
-      type: integer
-      description: number of workers that sisyphus will use
-  required:
-  - kafka-client-id
-  - workers
   additionalProperties: false
 stop:
   description: Stops sisyphus
+  additionalProperties: false

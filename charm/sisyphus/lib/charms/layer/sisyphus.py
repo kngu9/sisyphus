@@ -3,9 +3,6 @@ import re
 import socket
 import signal
 
-from pathlib import Path
-from base64 import b64encode
-
 from charmhelpers.core import hookenv
 from charmhelpers.core.templating import render
 
@@ -24,6 +21,7 @@ SISYPHUS_CA_CERT = os.path.join(
     SISYPHUS_COMMON,
     'ca.crt',
 )
+
 
 class Sisyphus(object):
     @staticmethod
@@ -57,21 +55,26 @@ class Sisyphus(object):
             return -1
 
         return int(buff)
-    
+
     def lock_pid(self, pid):
         with open(self.lock_path, 'w+') as f:
             f.write(str(pid))
 
     def is_running(self):
         pid = self.get_pid()
-        return os.path.exists(os.path.join('proc', str(pid)))
+        return all((
+            pid != -1,
+            os.path.exists(os.path.join(os.sep, 'proc', str(pid)))
+        ))
 
     def terminate(self, signal=signal.SIGTERM):
         pid = self.get_pid()
 
         if pid != -1 and self.is_running():
             os.kill(pid, signal)
-    
+
+            self.clear_pid()
+
     def clear_pid(self):
         with open(self.lock_path, 'w+') as f:
             f.write('')

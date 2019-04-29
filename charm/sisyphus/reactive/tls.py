@@ -3,7 +3,7 @@ import shutil
 
 from charmhelpers.core import hookenv
 
-from charms.reactive import (when, when_file_changed, remove_state,
+from charms.reactive import (when, remove_state,
                              when_not, set_state)
 
 from charms.layer import tls_client

@@ -6,9 +6,6 @@ includes:
 - 'interface:kafka'
 
 options:
-  basic:
-    packages:
-      - default-jre-headless
   snap:
     sisyphus: {}
 

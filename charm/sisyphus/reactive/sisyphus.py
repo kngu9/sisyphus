@@ -1,6 +1,7 @@
 from charms.layer.sisyphus import Sisyphus
 
-from charms.reactive import helpers, when, when_not, set_flag, clear_flag
+from charms.reactive import (helpers, when, when_not, set_flag, clear_flag,
+                             hook)
 
 from charmhelpers.core import hookenv
 
@@ -28,3 +29,21 @@ def install_sisyphus():
 @when('config.changed')
 def config_changed():
     install()
+
+
+@hook('upgrade-charm')
+def upgrade():
+    sisyphus = Sisyphus()
+    if sisyphus.is_running():
+        sisyphus.terminate()
+
+        hookenv.status_set('waiting', 'last run stopped because of upgrade; \
+waiting for further commands')
+
+
+@hook('update-status')
+def status():
+    if Sisyphus().is_running():
+        hookenv.status_set('active', 'sisyphus is running')
+    else:
+        hookenv.status_set('blocked', 'waiting for configuration')
